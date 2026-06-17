@@ -1,0 +1,65 @@
+name: PoC Turborepo tar-slip (Windows)
+
+# This workflow reproduces a path-traversal bug in turborepo-cache's
+# CacheReader::restore on Windows. It builds the PoC crate (which lives at
+# crates/turborepo-poc-tarslip and depends on the REAL turborepo-cache +
+# turbopath crates in this repo), runs it on windows-latest, and uploads the
+# escape-marker file as a build artifact if it appears outside the cache anchor.
+#
+# A green run with the "ESCAPE CONFIRMED" step printing a marker path means the
+# vulnerability reproduced on a clean GitHub-hosted Windows runner.
+
+on:
+  workflow_dispatch: {}   # run manually from the Actions tab
+  push:
+    paths:
+      - "crates/turborepo-poc-tarslip/**"
+      - ".github/workflows/poc-tarslip.yml"
+
+jobs:
+  windows:
+    name: Reproduce on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (nightly-2026-02-27, matches rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-02-27
+          components: rustfmt, clippy
+
+      - name: Install capnproto (build dep of turborepo-hash)
+        shell: pwsh
+        run: |
+          # capnp is needed by the build script of turborepo-hash, which is a
+          # transitive dependency of turborepo-cache.
+          choco install capnproto -y --no-progress
+          echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+
+      - name: Confirm capnp on PATH
+        shell: pwsh
+        run: capnp --version
+
+      - name: Build PoC (against real turborepo-cache)
+        shell: pwsh
+        run: cargo build -p turborepo-poc-tarslip --release
+
+      - name: Run PoC
+        shell: pwsh
+        run: cargo run -p turborepo-poc-tarslip --release
+
+      - name: Run unit tests (real check_path accepts crafted names)
+        shell: pwsh
+        run: cargo test -p turborepo-poc-tarslip --release
+
+      - name: Upload escape marker + malicious archives as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: turborepo-tarslip-poc-output
+          path: |
+            ${{ runner.temp }}/poc_tarslip_*.tar
+            ${{ runner.temp }}/TURBO_POCECAPED_*.txt
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,16 @@
+[package]
+name = "turborepo-poc-tarslip"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "PoC: exercises the REAL turborepo-cache CacheReader::restore with a crafted archive"
+
+# This crate uses the actual upstream crates from THIS repo, verbatim, so a
+# triager can set breakpoints inside turborepo-cache / turbopath and watch the
+# crafted entry flow through the genuine code path.
+
+[dependencies]
+turbopath = { path = "../turborepo-paths" }
+turborepo-cache = { path = "../turborepo-cache" }
+tar = "0.4.45"
+tempfile = { workspace = true }
